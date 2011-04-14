@@ -6,34 +6,42 @@ register = template.Library()
 
 DEFAULT_SORT_UP = getattr(settings, 'DEFAULT_SORT_UP' , '&uarr;')
 DEFAULT_SORT_DOWN = getattr(settings, 'DEFAULT_SORT_DOWN' , '&darr;')
-INVALID_FIELD_RAISES_404 = getattr(settings, 
+DEFAULT_DIR = 'desc'
+INVALID_FIELD_RAISES_404 = getattr(settings,
         'SORTING_INVALID_FIELD_RAISES_404' , False)
 
 sort_directions = {
-    'asc': {'icon':DEFAULT_SORT_UP, 'inverse': 'desc'}, 
-    'desc': {'icon':DEFAULT_SORT_DOWN, 'inverse': 'asc'}, 
-    '': {'icon':DEFAULT_SORT_DOWN, 'inverse': 'asc'}, 
+    'asc': {'icon':DEFAULT_SORT_UP, 'inverse': 'desc'},
+    'desc': {'icon':DEFAULT_SORT_DOWN, 'inverse': 'asc'},
+    '': {'icon':DEFAULT_SORT_DOWN, 'inverse': 'asc'},
 }
 
 def anchor(parser, token):
     """
-    Parses a tag that's supposed to be in this format: {% anchor field title %}    
+    Parses a tag that's supposed to be in this format: {% anchor field title %},
+    optionally takes default dir as the last arg: {% anchor field title dir %},
+    must be desc or asc
     """
     bits = [b.strip('"\'') for b in token.split_contents()]
     if len(bits) < 2:
-        raise TemplateSyntaxError, "anchor tag takes at least 1 argument"
+        raise TemplateSyntaxError("anchor tag takes at least 1 argument")
     try:
         title = bits[2]
     except IndexError:
         title = bits[1].capitalize()
-    return SortAnchorNode(bits[1].strip(), title.strip())
-    
+    try:
+        default_dir = bits[3].strip()
+        if default_dir not in ('desc', 'asc'):
+            default_dir = DEFAULT_DIR
+    except IndexError:
+        default_dir = DEFAULT_DIR
+    return SortAnchorNode(bits[1].strip(), title.strip(), default_dir)
 
 class SortAnchorNode(template.Node):
     """
-    Renders an <a> HTML tag with a link which href attribute 
+    Renders an <a> HTML tag with a link which href attribute
     includes the field on which we sort and the direction.
-    and adds an up or down arrow if the field is the one 
+    and adds an up or down arrow if the field is the one
     currently being sorted on.
 
     Eg.
@@ -41,9 +49,10 @@ class SortAnchorNode(template.Node):
         <a href="/the/current/path/?sort=name" title="Name">Name</a>
 
     """
-    def __init__(self, field, title):
+    def __init__(self, field, title, default_dir):
         self.field = field
         self.title = title
+        self.default_dir = default_dir
 
     def render(self, context):
         request = context['request']
@@ -62,6 +71,7 @@ class SortAnchorNode(template.Node):
             getvars['dir'] = sort_directions[sortdir]['inverse']
             icon = sort_directions[sortdir]['icon']
         else:
+            getvars['dir'] = self.default_dir
             icon = ''
         if len(getvars.keys()) > 0:
             urlappend = "&%s" % getvars.urlencode()
